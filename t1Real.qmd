@@ -136,7 +136,6 @@ Una vez seteados en la carpeta correcta, podemos cargar todas las capas y trabaj
 #| eval: false
 #| include: true
 
-
 jardinJunji <- st_read("layer_jardines_infantiles_junji_2024_20240619120021.shp")
 
 jardinIntegra <- st_read("layer_jardines_infantiles_fundacion_integra_20231112011653.shp")
@@ -378,10 +377,221 @@ Para ambos problemas se pueden ocupar operaciones espaciales, como por ejemplo, 
 
 1.  Cortar las Unidades Vecinales con las delimitaciones de Valdivia (dadas por el LUC).
 
-2.  A través del LUC de Valdivia, cortar ambas capas de jardines infantiles (Junji e Integra).
+2.  A través del LUC de Valdivia, cortar o filtrar ambas capas de jardines infantiles (Junji e Integra).
 
 De este modo, tendríamos todas las capas con las extensiones correspondientes.
 
+#### Recorte 
+
+Hay que diferenciar el tipo de operación espacial que se quiere realizar. 
+
+Primero que nada, se debe reconocer nuestra capa plantilla (`lucVald`), la cual delimitará el espacio de interés. Como precaución validaremos que no existan [errores topológicos](https://www.gisandbeers.com/topologia-principales-errores-en-un-sig/) en las capas. Esto puede hacerse con la función `st_make_valid()` que mantiene polígonos válidos y corrige errores topológicos (como agujeros o superposiciones).
+```{r}
+lucVald <- st_make_valid(lucVald)
+```
+
+De igual manera se puede hacer con la otra capa de polígonos
+
+```{r}
+uvVald <- st_make_valid(uvVald)
+```
+
+Ahora, en el caso de los puntos, nos interesa obtener los puntos que se encuentran exactamente dentro del Limite Urbano Censal de Valdivia y a su vez, mantener las propiedades de estos (atributos). En el caso de los puntos esto puede verse así
+
+```{r}
+junjiVal <- jardinJunji %>%  #<1>
+  st_filter(lucVald, #<2>
+            .predicate = st_covered_by) #<3>
+```
+1. Crea el objeto `junjiVal` que es la capa nacional de los jardines JUNJI (`jardinJunji`). A este último se le realizará una operación (en la próxima línea). Esto puede lograrse con la pipa (`%>%`).
+2. Filtramos (con la función `st_filter`) la capa original con el LUC (`lucVald`).
+3. El método de filtrado es *cubierto por* (`st_covered_by`).
+
+El código anterior se podría traducir a *lenguaje humano* como:
+
+> De la capa de *jardines JUNJI de Chile*, filtra por los que  *están cubiertos por* el Límite Urbano Censal de Valdivia. El resultado de la operación guardalo en `junjiVal`.
+
+Aplicamos la misma lógica para la otra capa
+
+```{r}
+integraVal <- jardinIntegra %>%  
+  st_filter(lucVald, 
+            .predicate = st_covered_by) 
+```
+
+Para manejar los datos de la mejor manera, se unirán ambas capas en un solo objeto, claro que diferenciando entre las fuentes de los datos. Primero veamos los atributos de cada capa
+
+```{r}
+integraVal %>% glimpse()
+junjiVal %>% glimpse()
+```
+
+Ambas capas comparten atributos similares como `COMUNA` o `DIRECCION`. Por otro lado, hay atributos que para los objetivos de este trabajo no son necesarios, como latitud, teléfono, etc. Para simplificar esta base de datos compartida nos quedaremos con las siguientes columnas:
+
+*   `Nombre`
+
+*   `Dirección`
+
+*   `Modalidad`
+
+*   `Fuente`: el cual se creará para ver de donde se extrajeron los datos.
+
+Primero se seleccionarán los atributos correspondientes en ambas capas:
+
+```{r}
+integraValCopia <- integraVal %>% #<1>
+  select(nombre = NOMBRE, #<2>
+         direccion = DIRECCION, #<3>
+         modalidad = MODALIDAD) %>%  #<3>
+  mutate(fuente = "INTEGRA") #<4>
+
+junjiValCopia <- junjiVal %>% #<1>
+  select(nombre = NOMBRE, #<2>
+         direccion = DIRECCION, #<3>
+         modalidad = MODALIDAD) %>%  #<3>
+  mutate(fuente = "JUNJI") #<4>
+```
+1. Aquí, seleccionamos las capa a editar e indicamos que viene una operación con la pipa (`%>%`).
+2. Seleccionamos las columnas de interés con la función (`select()`). Además, a través de la expresión `nombre = NOMBRE` se aprovecha de renombrar los nombres originales de las columnas, pasando de `NOMBRE` a `nombre`.
+3. De la misma forma, se seleccionan las columnas `DIRECCION` y `MODALIDAD` además de renombrarlas.
+4. Con la función `mutate()` *mutamos* la tabla. En este caso, se crea la columna `fuente`, e indicamos que los valores de esa columna es un texto. Dependiendo de donde sea nuestra fuente, tendrá los valores `INTEGRA` o `JUNJI`.
+
+::: {.callout-note}
+Es recomendable revisar las capas generadas en cada proceso, ya que este proceso puede ser abstracto y confuso. Puede efectuarse con la función `glimpse()` o simplemente escribiendo el nombre del objeto. Una forma rápida de hacer esto sería por ejemplo
+
+```{r}
+#| eval: false
+
+capa_a_analizar %>% glimpse()
+```
+
+Donde `capa_a_analizar` es el objeto que se crea, como `junjiValCopia` o `integraValCopia`.
+:::
+
+Una vez tengamos ambas capas preparadas podemos unir las capas con la función `bind_rows()`, la cual une tablas por filas. Como requisito, esta función necesita que ambas tablas tengan las mismas columnas (y con los mismos nombres).
+
+```{r}
+jardinesValdivia <- integraValCopia %>% 
+  bind_rows(junjiValCopia) 
+```
+
+En este caso, estamos indicando que la capa `integraValCopia` (que es una tabla), se le una (con `bind_rows()`) la tabla `junjiValCopia`. El resultado de esta operación se guarda en `jardinesValdivia`.
+
+
+En el caso de las unidades vecinales la opción del filtrado no sirve ya que la capa mantendrá los polígonos que toquen el LUC, pero no los cortará. Esto provocará que la capa de UV sea más grande que el LUC y por ende, no coincidirán espacialmente. Por lo tanto, se debe ocupar la función `st_intersection()`, la cual corta una capa con otra.
+
+```{r}
+#| warning: false
+
+uvValdCortado <- uvVald %>% 
+  st_intersection(lucVald[0]) %>% #<1>
+  st_make_valid() #<2>
+```
+1. Al LUC (`lucVald`) se le agrega el elemento `[0]` para deseleccionar todas las columnas (o seleccionar ninguna columna). Así, al revisar `uvValdCortado`, solo quedarán las columnas del objeto original, es decir `uvVald`. De no indicar este parámetro, cada polígono de `uvValdCortado` habría quedado con los atributos de la capa original y de la capa plantilla `lucVald`.
+2. Repetimos la lógica de evitar errores topológicos.
+
+::: {.callout-note}
+El nombre de las variables puede ser confuso, como es en el caso de `uvValdCortado` con `uvVald`. Estos nombres son arbitrarios y usted puede cambiarlo a su conveniencia. Sin embargo, esta guía seguirá empleando los nombres declarados.
+:::
+
+Si desea, puede guardar los objetos creados como un archivo `.shp`, lo que es recomendable para no tener que repetir el proceso cada vez que se quiera trabajar con estas capas.
+
+```{r}
+#| eval: false
+
+st_write(jardinesValdivia, "jardinesValdivia.shp")
+st_write(uvValdCortado, "uvValdCortado.shp")
+st_write(junjiVal, "junjiVal.shp") # Opcional
+st_write(integraVal, "integraVal.shp") # Opcional
+```
+
+```{r}
+#| eval: false
+#| echo: false
+#| output: false
+
+st_write(jardinesValdivia, "datos/jardinesValdivia.shp")
+st_write(uvValdCortado, "datos/uvValdCortado.shp")
+```
+
+Veamos como quedaron las capas con todo el pre proceso.
+
+```{python}
+#| echo: false
+#| message: false
+#| warning: false
+
+jardines = gpd.read_file('C:/uni/oit/t1Real/datos/jardinesValdivia.shp')
+luc = gpd.read_file('C:/uni/oit/t1Real/datos/LUC_Valdivia.gpkg')
+uvVal = gpd.read_file('C:/uni/oit/t1Real/datos/uvValdCortado.shp')
+
+
+geo_df_list = [[point.xy[1][0], point.xy[0][0]] for point in jardines.geometry]
+
+m = folium.Map(location=[-39.819, -73.245], zoom_start=12, tiles="CartoDB Positron")
+
+grupoJunji = folium.FeatureGroup("Puntos - Junji").add_to(m)
+grupoIntegra = folium.FeatureGroup("Puntos - Integra").add_to(m)
+
+for idx, row in jardines.iterrows():
+
+    coords = [row.geometry.y, row.geometry.x]
+
+    color = 'green' if row['fuente'] == "JUNJI" else 'blue'
+
+    text_html = (
+        f"Nombre: {row.get('nombre', '')}<br>"
+        f"Modalidad: {row.get('modalidad', '')}<br>"
+        f"Direccion: {row.get('direccion', '')}<br>"
+        f"Fuente: {row.get('fuente', '')}"
+    )
+
+    marker = folium.Marker(
+        location = coords,
+        popup = text_html,
+        icon = folium.Icon(icon = 'school', prefix = 'fa', color=color)
+    );
+
+    if row['fuente'] == 'JUNJI':
+        marker.add_to(grupoJunji);
+    else:
+        marker.add_to(grupoIntegra);
+
+fg_luc = folium.FeatureGroup(name="Polígonos - LUC").add_to(m);
+fg_uv  = folium.FeatureGroup(name="Polígonos - UV").add_to(m);
+
+style_luc = lambda feat: {
+    "fillColor": "orange",
+    "color": "darkorange",
+    "weight": 1,
+    "fillOpacity": 0.35
+}
+style_uv = lambda feat: {
+    "fillColor": "purple",
+    "color": "indigo",
+    "weight": 1,
+    "fillOpacity": 0.25
+}
+
+folium.GeoJson(
+    data=luc.to_json(),
+    name="Limite Urbano Censal",
+    style_function=style_luc,
+    popup=folium.GeoJsonPopup(fields=list(luc.columns.drop('geometry')))
+).add_to(fg_luc);
+
+folium.GeoJson(
+    data=uvVal.to_json(),
+    name="Unidad Vecinal",
+    style_function=style_uv,
+    popup=folium.GeoJsonPopup(fields=list(uvVal.columns.drop('geometry')))
+).add_to(fg_uv);
+
+
+folium.LayerControl(collapsed=True).add_to(m);
+
+m
+```
 
 
 

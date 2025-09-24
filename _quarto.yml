@@ -28,8 +28,9 @@ format:
     lang: es
     toc-location: right
     number-sections: true     
-    number-depth: 3
+    number-depth: 4
     self-contained: true
+    output-file: "index.html"
 
 
 
