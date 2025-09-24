@@ -1,0 +1,35 @@
+project:
+  title: "Trabajo 1 Planificación Territorial"
+  output-dir: docs
+
+jupyter:
+  kernel: interactivo
+
+date: today
+
+author: 
+  - name: "Martina Cadagán"
+    email: "martina.cadagan@alumnos.uach.cl"
+  - name: "Bárbara Caro"
+    email: "barbara.caro@alumnos.uach.cl"
+  - name: "Alén Miranda"
+    email: "alen.miranda@alumnos.uach.cl"
+  - name: "Priscila Paredes"
+    email: "priscila.paredes@alumnos.uach.cl"
+  - name: "Sofía Pinto"
+    email: "sofia.pinto01@alumnos.uach.cl"
+  - name: "Cristian Soto"
+    email: "cristian.soto@alumnos.uach.cl"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    lang: es
+    toc-location: right
+    number-sections: true     
+    number-depth: 3
+    self-contained: true
+
+
+

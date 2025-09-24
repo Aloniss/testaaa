@@ -1,0 +1,391 @@
+---
+title: "Trabajo 1 Planificación Territorial"
+---
+
+Esta es una guía detallada de como poder realizar el trabajo práctico N°1 del curso Planificación Territorial.
+
+El objetivo es ... jardines ... ciudad en 15 minutos ... ver cuanto se demora a pie.
+
+# Organización {#sec-organizacion}
+
+::: {.callout-important}
+Este informe esta pensado en ejecutarse dentro de una carpeta que contenga el trabajo (por ejemplo, *trabajo1*) y **DENTRO DE ESTA** una carpeta llamada **datos**, la cual contendrá todas las capas para el análisis.
+:::
+
+A modo de ejemplo, el trabajo debería tener un orden así
+
+```
+Carpeta_del_trabajo/
+├── scprit.r
+└── datos/
+    ├── DEM Los Ríos.tif
+    ├── Jardines Junji.shp
+    ├── Jardines Integra.shp
+    ├── Limite Urbano Censal Valdivia.gpkp
+    └── Unidad Vecinal Valdivia.gpkp
+```
+
+**En mi caso, la estructura es así**
+
+```
+C:/uni/oit/trabajo1/
+├── scprit.r
+└── datos/
+    ├── dem_tif.tif
+    ├── layer_jardines_infantiles_junji_2024_20240619120021.shp
+    ├── layer_jardines_infantiles_fundacion_integra_20231112011653.shp
+    ├── LUC_Valdivia.gpkg
+    └── Unidad_vecinal_Valdi.gpkg
+```
+
+::: {.callout-note}
+Cabe resaltar que cada usuari@ puede tener el orden que quiera, aquí tendrá este orden para una mejor reproducibilidad.
+:::
+
+# Datos
+
+## Obtención de Datos
+
+Los datos con los que se trabajará serán los siguientes:
+
+-   DEM Alos Palsar: El Modelo Digital de Elevación que fue provisto en la clase. Sin embargo, puede descargarse desde [IDE Chile](https://www.geoportal.cl/geoportal/catalog/35432/DEM%20Alos%20Palsar%20Regi%C3%B3n%20de%20Los%20R%C3%ADos).
+
+-   Límite Urbano Censal de Valdivia: Provisto en Clase.
+
+-   Unidad Vecinal de Valdivia: Provisto en Clase.
+
+-   Jardines Infantiles JUNJI: Descargado desde [IDE Chile](https://www.geoportal.cl/geoportal/catalog/34965/Jardines%20Infantiles%20JUNJI).
+
+-   Jardines Infantiles Fundación Integra: Descargado desde [IDE Chile](https://www.geoportal.cl/geoportal/catalog/35001/Jardines%20Infantiles%20Fundaci%C3%B3n%20Integra).
+
+::: {.callout-warning}
+Aquí debemos evaluar si incluir datos de jardines privados, aunque está abierto a discusión.
+:::
+
+## Pre Procesamiento
+
+### Librerías
+
+Las librerías serán las mismas que se han visto en las clases. Son las siguientes:
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr) # <1>
+library(ggplot2) # <1>
+library(dodgr) # <2>
+library(sf) # <3>
+library(h3) # <4>
+library(terra) # <5>
+library(osmdata) # <6>
+library(tmap) # <7>
+```
+
+1. Paquete para el manejo de datos. Personalmente prefiero cargar `tidyverse` ya que incluye otras librerías importantes como `lubridate` (para manejo de fechas) o `ggplot2`, para visualización.
+2. Librería para analizar teoría de grafos. Encontré una guía introductoria (pero en inglés) [aquí](https://mathigon.org/course/graph-theory/introduction).
+3. Librería que maneja los datos espaciales. Piensen los datos vectoriales como una tabla excel con atributos (como *Nombre*, *Descripción*, *Region*, *etc*.) y que al final tiene una columna de geometría (usualmente llamada `.geo` o `geometry`), la que provee a un dato de una "forma". 
+4. Paquete para hacer los hexágonos.
+5. Librería para manejar datos ráster. 
+6. Para obtener datos de elevación y de *Open Street Map* (OSM).
+7. Esta es para hacer cartografía, tal como se hace en QGIS. Pero con esta librería se hacen los mapas interactivos también.
+
+
+::: {.callout-note}
+Se puede hacer click en los números para una "selección" visual.
+:::
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+
+library(kableExtra)
+```
+
+### Situar el Ambiente
+
+Antes de comenzar, dentro del script deberemos *setear* el ambiente hacia donde están los datos. Revisar @sec-organizacion para seguir el siguiente ejemplo.
+
+Si el script (`scprit.r`) se encuentra dentro de la carpeta *trabajo1*, **pero no dentro** de la carpeta *datos*
+```{r}
+#| eval: false
+
+setwd("datos/")
+```
+
+Si el script **no se encuentra** dentro de la carpeta *trabajo1*, se deberá hacer alusión a la **ruta completa** de los datos. En mi caso:
+
+```{r}
+#| eval: false
+
+setwd("C:/uni/oit/t1/datos/")
+```
+
+Si el script se encuentra *dentro* de la carpeta datos, en teoría no debería hacerse nada.
+
+::: {.callout-warning}
+Windows indica las rutas de las carpetas con el *backslash* (`\`) pero R nos los maneja bien. Para indicar la ruta de una carpeta se debe cambiar este símbolo por un *slash* (`/`).
+:::
+
+### Cargar las capas
+
+Una vez seteados en la carpeta correcta, podemos cargar todas las capas y trabajar en base a eso. Para los datos `.shp` se deberá ocupar `st_read()` desde el paquete `sf` y para datos raster la función `rast()` de `terra`.
+
+```{r}
+#| eval: false
+#| include: true
+
+
+jardinJunji <- st_read("layer_jardines_infantiles_junji_2024_20240619120021.shp")
+
+jardinIntegra <- st_read("layer_jardines_infantiles_fundacion_integra_20231112011653.shp")
+
+dem <- rast("dem_tif.tif")
+
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| output: false
+
+jardinJunji <- st_read("datos/layer_jardines_infantiles_junji_2024_20240619120021.shp")
+
+jardinIntegra <- st_read("datos/layer_jardines_infantiles_fundacion_integra_20231112011653.shp")
+
+dem <- rast("c:/uni/oit/dem_tif.tif")
+
+```
+
+En el caso de las capas de LUC y Unidad Vecinal de Valdivia, que se encuentran en formato `.gpkg`, se deberá indicar un argumento extra dentro de `st_read()`. Esto ya que el formato *geopackage* es un contenedor que puede almacenar múltiples capas y otros datos relacionados, todo en un único archivo. Es por esto que hay que indicar que capa se quiere acceder. Para ver el listado de capas que tiene un `.gpkg`, se puede usar la funcion `st_layers()`:
+
+```{r}
+#| eval: false
+#| include: true
+
+st_layers("LUC_Valdivia.gpkg")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+
+print(st_layers("datos/LUC_Valdivia.gpkg"))
+```
+
+Podemos ver que el archivo `LUC_Valdivia.gpkg` tiene solo una capa, llamada `luc_valdivia` (a través del campo `layer_name`). En el caso de las unidades vecinales
+
+```{r}
+#| eval: false
+#| include: true
+
+st_layers("Unidad_vecinal_Valdi.gpkg")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+
+print(st_layers("datos/Unidad_vecinal_Valdi.gpkg"))
+```
+
+la capa se llama `unidad_vecinal`. Con esta información podemos cargar correctamente los datos:
+
+```{r}
+#| eval: false
+#| include: true
+
+lucVald <- st_read("LUC_Valdivia.gpkg",
+                   layer = "luc_valdivia")
+
+
+uvVald <- st_read("Unidad_vecinal_Valdi.gpkg",
+                  layer = "unidad_vecinal")
+```
+
+```{r}
+#| eval: true
+#| echo: false
+#| output: false
+
+lucVald <- st_read("datos/LUC_Valdivia.gpkg",
+                    layer = "luc_valdivia")
+
+
+uvVald <- st_read("datos/Unidad_vecinal_Valdi.gpkg",
+                    layer = "unidad_vecinal")
+```
+
+
+### Proyección
+
+Para poder hacer el informe, debemos tener en consideración la proyección de las capas. Para que el flujo funcione, **TODAS** las capas deben estar en `EPSG:4326`, el cual corresponder a la proyección mundial *WGS 84*, el cual se compone de *latitud* y *longitud* (en grados).
+
+##### Datos Vectoriales
+
+Para ver el CRS de un dato vectorial se podría ocupar la función `st_crs()`, el cual mostrará *toda* la información de la proyección.
+
+```{r}
+st_crs(uvVald)
+```
+
+Sin embargo, como esto muestra toda la información, accederemos únicamente al *EPSG* accediendo con el signo peso (`$`).
+
+```{r}
+st_crs(uvVald)$epsg
+```
+
+Esta capa ya se encuentra en el sistema de coordenadas. De querer confirmar esto, se puede comparar con el operador de igualdad (`==`). Este operador compara si dos valores son iguales. Devuelve `TRUE` si son iguales y `FALSE` si son distintos.
+
+```{r}
+st_crs(uvVald)$epsg == 4326
+```
+
+Esto confirma que la capa se encuentra en el sistema de proyección correspondiente. Veamos las otras capas
+
+```{r}
+st_crs(lucVald)$epsg == 4326
+st_crs(jardinJunji)$epsg == 4326
+st_crs(jardinIntegra)$epsg == 4326
+```
+
+Esto indica que todas las capas se encuentran en WGS 84.
+
+##### Dato Ráster
+
+De la misma manera, `terra` tiene la función `crs()` que con el argumento `describe = TRUE` y accediendo al código (code) con `$` podemos comparar de la misma manera
+
+```{r}
+crs(dem, describe = T)$code == 4326
+```
+
+Con esto confirmamos que todas las capas están en la misma proyección.
+
+### Extensión
+
+El objetivo del trabajo está pensado en las unidades vecinales de Valdivia (`uvVald`) pero dentro de los límites de la ciudad (`lucVald`). Visualicemos como se situan todas las capas.
+
+
+```{r}
+#| label: setup-reticulate
+#| echo: false
+#| message: false
+#| warning: false
+
+library(reticulate)
+use_condaenv("interactivo", required = TRUE)  # o la ruta completa al python.exe
+# para verificar qué Python quedó seleccionado
+```
+
+```{python}
+#| echo: false
+#| message: false
+#| warning: false
+
+import folium
+import geopandas as gpd
+import os
+import pandas as pd
+
+integra = gpd.read_file('c:/uni/oit/t1Real/datos/layer_jardines_infantiles_fundacion_integra_20231112011653.shp')
+junji = gpd.read_file('c:/uni/oit/t1Real/datos/layer_jardines_infantiles_junji_2024_20240619120021.shp')
+luc = gpd.read_file('c:/uni/oit/t1Real/datos/LUC_Valdivia.gpkg')
+uv = gpd.read_file('c:/uni/oit/t1Real/datos/Unidad_vecinal_Valdi.gpkg')
+
+integraSimple = integra[['COMUNA', 'NOMBRE', 'MODALIDAD', 'DIRECCION', 'geometry']]
+integraSimple['fuente'] = 'INTEGRA'
+
+junjiSimple = junji[['COMUNA', 'NOMBRE', 'MODALIDAD', 'DIRECCION', 'geometry']]
+junjiSimple['fuente'] = 'JUNJI'
+
+gdfPuntos = gpd.GeoDataFrame(pd.concat([integraSimple, junjiSimple],ignore_index=True), crs=integraSimple.crs)
+
+geo_df_list = [[point.xy[1][0], point.xy[0][0]] for point in gdfPuntos.geometry]
+
+m = folium.Map(location=[-39.819, -73.245], zoom_start=12, tiles="CartoDB Positron")
+
+grupoJunji = folium.FeatureGroup("Puntos - Junji").add_to(m)
+grupoIntegra = folium.FeatureGroup("Puntos - Integra").add_to(m)
+
+for idx, row in gdfPuntos.iterrows():
+
+    coords = [row.geometry.y, row.geometry.x]
+
+    color = 'green' if row['fuente'] == "JUNJI" else 'blue'
+
+    text_html = (
+        f"Nombre: {row.NOMBRE}<br>"
+        f"Modalidad: {row.MODALIDAD}<br>"
+        f"Comuna: {row.COMUNA}<br>"
+        f"Direccion: {row.DIRECCION}"
+    )
+
+    marker = folium.Marker(
+        location = coords,
+        popup = text_html,
+        icon = folium.Icon(icon = 'school', prefix = 'fa', color=color)
+    );
+
+    if row['fuente'] == 'JUNJI':
+        marker.add_to(grupoJunji);
+    else:
+        marker.add_to(grupoIntegra);
+
+fg_luc = folium.FeatureGroup(name="Polígonos - LUC").add_to(m);
+fg_uv  = folium.FeatureGroup(name="Polígonos - UV").add_to(m);
+
+style_luc = lambda feat: {
+    "fillColor": "orange",
+    "color": "darkorange",
+    "weight": 1,
+    "fillOpacity": 0.35
+}
+style_uv = lambda feat: {
+    "fillColor": "purple",
+    "color": "indigo",
+    "weight": 1,
+    "fillOpacity": 0.25
+}
+
+folium.GeoJson(
+    data=luc.to_json(),
+    name="Limite Urbano Censal",
+    style_function=style_luc,
+    popup=folium.GeoJsonPopup(fields=list(luc.columns.drop('geometry')))
+).add_to(fg_luc);
+
+folium.GeoJson(
+    data=uv.to_json(),
+    name="Unidad Vecinal",
+    style_function=style_uv,
+    popup=folium.GeoJsonPopup(fields=list(uv.columns.drop('geometry')))
+).add_to(fg_uv);
+
+
+folium.LayerControl(collapsed=True).add_to(m);
+
+m
+```
+
+A primera vista podemos dos desafíos:
+
+1.  La enorme cantidad de establecimientos en jardines infantiles. Esto ocurre ya que ambas campas (Junji e Integra) se encuentran a nivel nacional.
+
+2.  También, el LUC nos provee de los límites a trabajar mientras que las unidades vecinales (que son más grandes), proporciona las "particiones" que tendría la ciudad de Valdivia.
+
+Para ambos problemas se pueden ocupar operaciones espaciales, como por ejemplo, el corte o la superposición. El flujo sería:
+
+1.  Cortar las Unidades Vecinales con las delimitaciones de Valdivia (dadas por el LUC).
+
+2.  A través del LUC de Valdivia, cortar ambas capas de jardines infantiles (Junji e Integra).
+
+De este modo, tendríamos todas las capas con las extensiones correspondientes.
+
+
+
+
+
+
+
+
